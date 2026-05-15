@@ -107,7 +107,6 @@ rewrite (char *axiom, char *rule_find, char *rule_replace, int iterations)
 	for (int i = 0; i < iterations; i++)
 	{
 
-		// raplced malloc line
 		size_t len = strlen (current);
 		size_t rule_len = strlen (rule_replace);
 		size_t matches = 0;
