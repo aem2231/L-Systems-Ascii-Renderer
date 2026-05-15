@@ -1,3 +1,4 @@
+#include <stddef.h>
 #define _POSIX_C_SOURCE 200809L
 #include <math.h>
 #include <stdio.h>
@@ -33,9 +34,10 @@ init_canvas ()
 	ioctl (STDOUT_FILENO, TIOCGWINSZ, &w);
 	WIDTH = w.ws_col;
 	HEIGHT = w.ws_row;
+	char *buffer = malloc (WIDTH * HEIGHT);
 	canvas = malloc (HEIGHT * sizeof (char *));
 	for (int y = 0; y < HEIGHT; y++)
-		canvas[y] = malloc (WIDTH * sizeof (char));
+		canvas[y] = buffer + (y * WIDTH);
 }
 
 /**
@@ -82,9 +84,7 @@ draw_line_centred (int x0, int y0, int x1, int y1)
 void
 clear_canvas ()
 {
-	for (int y = 0; y < HEIGHT; y++)
-		for (int x = 0; x < WIDTH; x++)
-			canvas[y][x] = ' ';
+	memset (canvas[0], ' ', WIDTH * HEIGHT);
 }
 
 void
@@ -93,8 +93,7 @@ print_canvas ()
 	printf ("\033[2J\033[H");
 	for (int y = 0; y < HEIGHT; y++)
 	{
-		for (int x = 0; x < WIDTH; x++)
-			putchar (canvas[y][x]);
+		fwrite (canvas[y], 1, WIDTH, stdout);
 		printf ("\r\n");
 	}
 }
@@ -107,15 +106,33 @@ rewrite (char *axiom, char *rule_find, char *rule_replace, int iterations)
 	char *current = strdup (axiom);
 	for (int i = 0; i < iterations; i++)
 	{
-		char *next = malloc (strlen (current) * strlen (rule_replace) + 1);
-		next[0] = '\0';
-		for (size_t j = 0; j < strlen (current); j++)
+
+		// raplced malloc line
+		size_t len = strlen (current);
+		size_t rule_len = strlen (rule_replace);
+		size_t matches = 0;
+		for (size_t j = 0; j < len; j++)
+			if (current[j] == rule_find[0])
+				matches++;
+
+		size_t next_len = (len - matches) + (matches * rule_len) + 1;
+		char *next = malloc (next_len);
+
+		size_t pos = 0;
+		for (size_t j = 0; j < len; j++)
 		{
 			if (current[j] == rule_find[0])
-				strcat (next, rule_replace);
+			{
+				memcpy (next + pos, rule_replace, rule_len);
+				pos += rule_len;
+			}
 			else
-				strncat (next, &current[j], 1);
+			{
+				next[pos++] = current[j];
+			}
 		}
+
+		next[pos] = '\0';
 		free (current);
 		current = next;
 	}
@@ -132,15 +149,18 @@ render_with_branches (char *lstring, float step_size, float turn_angle)
 	float turn_angle_radians = turn_angle * (PI / 180);
 	t1.angle = PI / 2; // Start pointing upward (90 degrees)
 
-	for (size_t i = 0; i < strlen (lstring); i++)
+	float cos_a = cos (t1.angle);
+	float sin_a = sin (t1.angle);
+
+	size_t len_lstring = strlen (lstring);
+	for (size_t i = 0; i < len_lstring; i++)
 	{
 		char c = *(lstring + i);
 
-		float end_x = t1.x + step_size * cos (t1.angle);
-		float end_y = t1.y - step_size * sin (t1.angle);
-
 		if (c == 'F')
 		{
+			float end_x = t1.x + step_size * cos_a;
+			float end_y = t1.y - step_size * sin_a;
 			draw_line_centred ((int)t1.x, (int)t1.y, (int)end_x, (int)end_y);
 			t1.x = end_x;
 			t1.y = end_y;
@@ -148,12 +168,16 @@ render_with_branches (char *lstring, float step_size, float turn_angle)
 		else if (c == '-')
 		{
 			t1.angle -= turn_angle_radians;
+			cos_a = cos (t1.angle);
+			sin_a = sin (t1.angle);
 		}
 		else if (c == '+')
 		{
 			t1.angle += turn_angle_radians;
+			cos_a = cos (t1.angle);
+			sin_a = sin (t1.angle);
 		}
-	};
+	}
 }
 
 /*** Terminal ***/
